@@ -85,13 +85,99 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 30px;
             border-radius: 20px;
             text-align: center;
             display: none;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 300px;
+        }
+
+        .leaderboard {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .leaderboard h3 {
+            margin-bottom: 15px;
+            color: #4ecdc4;
+            font-size: 1.2rem;
+        }
+
+        .leaderboard-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .leaderboard-item.highlight {
+            background: rgba(255, 107, 107, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        .initials-prompt {
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            backdrop-filter: blur(10px);
+            z-index: 1001;
+        }
+
+        .initials-input {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            color: white;
+            font-size: 1.2rem;
+            text-align: center;
+            margin: 15px 0;
+            width: 80px;
+            text-transform: uppercase;
+        }
+
+        .initials-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .submit-btn {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 10px;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.4);
         }
 
         .game-over h2 {
@@ -183,10 +269,26 @@
             <p>🔄 Press R to restart</p>
         </div>
         
+        <div class="leaderboard">
+            <h3>🏆 Top 10 Scores</h3>
+            <ul id="leaderboardList" class="leaderboard-list">
+                <!-- Leaderboard items populated by JavaScript -->
+            </ul>
+        </div>
+        
         <div id="gameOver" class="game-over">
             <h2>Game Over!</h2>
             <p>Final Score: <span id="finalScore">0</span></p>
             <button id="restartBtn" class="restart-btn">Play Again</button>
+        </div>
+
+        <div id="initialsPrompt" class="initials-prompt">
+            <h3>🎉 New High Score!</h3>
+            <p>Score: <span id="newHighScore">0</span></p>
+            <p>Enter your initials:</p>
+            <input type="text" id="initialsInput" class="initials-input" maxlength="3" placeholder="ABC">
+            <br>
+            <button id="submitScore" class="submit-btn">Submit</button>
         </div>
     </div>
 
@@ -208,12 +310,16 @@
                 this.highScore = localStorage.getItem('snakeHighScore') || 0;
                 this.gameRunning = false;
                 this.gamePaused = false;
+                this.gameEnded = false;
+                this.leaderboard = JSON.parse(localStorage.getItem('snakeLeaderboard')) || [];
+                this.lastPlayerName = localStorage.getItem('lastPlayerName') || '';
                 
                 this.init();
             }
             
             init() {
                 this.updateHighScore();
+                this.updateLeaderboard();
                 this.generateFood();
                 this.setupEventListeners();
                 this.gameLoop();
@@ -221,6 +327,8 @@
             
             setupEventListeners() {
                 document.addEventListener('keydown', (e) => {
+                    if (this.gameEnded) return; // Block input when game is over
+                    
                     if (!this.gameRunning && !this.gamePaused) {
                         this.startGame();
                     }
@@ -234,6 +342,16 @@
                 document.getElementById('pauseBtn').addEventListener('click', () => {
                     this.togglePause();
                 });
+
+                document.getElementById('submitScore').addEventListener('click', () => {
+                    this.submitHighScore();
+                });
+
+                document.getElementById('initialsInput').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        this.submitHighScore();
+                    }
+                });
             }
             
             handleKeyPress(e) {
@@ -244,7 +362,9 @@
                 }
                 
                 if (e.key === 'r' || e.key === 'R') {
-                    this.restart();
+                    if (!this.gameEnded) {
+                        this.restart();
+                    }
                     return;
                 }
                 
@@ -276,11 +396,12 @@
             startGame() {
                 this.gameRunning = true;
                 this.gamePaused = false;
+                this.gameEnded = false;
                 document.getElementById('pauseBtn').textContent = 'Pause';
             }
             
             togglePause() {
-                if (!this.gameRunning) return;
+                if (!this.gameRunning || this.gameEnded) return;
                 
                 this.gamePaused = !this.gamePaused;
                 document.getElementById('pauseBtn').textContent = this.gamePaused ? 'Resume' : 'Pause';
@@ -293,7 +414,9 @@
                 this.score = 0;
                 this.gameRunning = false;
                 this.gamePaused = false;
+                this.gameEnded = false;
                 document.getElementById('gameOver').style.display = 'none';
+                document.getElementById('initialsPrompt').style.display = 'none';
                 document.getElementById('pauseBtn').textContent = 'Pause';
                 this.updateScore();
                 this.generateFood();
@@ -315,7 +438,7 @@
             }
             
             update() {
-                if (!this.gameRunning || this.gamePaused) return;
+                if (!this.gameRunning || this.gamePaused || this.gameEnded) return;
                 
                 const head = {x: this.snake[0].x + this.dx, y: this.snake[0].y + this.dy};
                 
@@ -393,7 +516,7 @@
                 }
                 
                 // Draw start message
-                if (!this.gameRunning && !this.gamePaused) {
+                if (!this.gameRunning && !this.gamePaused && !this.gameEnded) {
                     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                     this.ctx.font = '20px Arial';
                     this.ctx.textAlign = 'center';
@@ -424,11 +547,76 @@
             updateHighScore() {
                 document.getElementById('highScore').textContent = this.highScore;
             }
+
+            updateLeaderboard() {
+                const list = document.getElementById('leaderboardList');
+                list.innerHTML = '';
+                
+                this.leaderboard.sort((a, b) => b.score - a.score);
+                this.leaderboard.slice(0, 10).forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'leaderboard-item';
+                    li.innerHTML = `
+                        <span>${index + 1}. ${entry.name}</span>
+                        <span>${entry.score}</span>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+
+            isHighScore(score) {
+                if (this.leaderboard.length < 10) return true;
+                return score > this.leaderboard[this.leaderboard.length - 1].score;
+            }
+
+            promptForInitials(score) {
+                document.getElementById('newHighScore').textContent = score;
+                document.getElementById('initialsInput').value = this.lastPlayerName;
+                document.getElementById('initialsPrompt').style.display = 'block';
+                document.getElementById('initialsInput').focus();
+            }
+
+            submitHighScore() {
+                const initials = document.getElementById('initialsInput').value.toUpperCase().trim() || 'AAA';
+                
+                this.leaderboard.push({
+                    name: initials,
+                    score: this.score,
+                    date: new Date().toLocaleDateString()
+                });
+
+                this.leaderboard.sort((a, b) => b.score - a.score);
+                this.leaderboard = this.leaderboard.slice(0, 10);
+
+                localStorage.setItem('snakeLeaderboard', JSON.stringify(this.leaderboard));
+                localStorage.setItem('lastPlayerName', initials);
+                this.lastPlayerName = initials;
+
+                document.getElementById('initialsPrompt').style.display = 'none';
+                document.getElementById('gameOver').style.display = 'block';
+                this.updateLeaderboard();
+
+                // Highlight the new score
+                setTimeout(() => {
+                    const items = document.querySelectorAll('.leaderboard-item');
+                    items.forEach(item => {
+                        if (item.textContent.includes(initials) && item.textContent.includes(this.score.toString())) {
+                            item.classList.add('highlight');
+                        }
+                    });
+                }, 100);
+            }
             
             gameOver() {
                 this.gameRunning = false;
+                this.gameEnded = true;
                 document.getElementById('finalScore').textContent = this.score;
-                document.getElementById('gameOver').style.display = 'block';
+                
+                if (this.isHighScore(this.score)) {
+                    this.promptForInitials(this.score);
+                } else {
+                    document.getElementById('gameOver').style.display = 'block';
+                }
             }
             
             gameLoop() {
